@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - photo_data:/app/data
+      - face_models:/root/.insightface
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AI_PROVIDER=${AI_PROVIDER:-anthropic}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-vl}
+      - DATABASE_URL=sqlite:///./data/travel_tracker.db
+      - PHOTO_STORAGE_PATH=/app/data/photos
+      - THUMBNAIL_STORAGE_PATH=/app/data/thumbnails
+      - FACE_CROP_PATH=/app/data/face_crops
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+
+volumes:
+  photo_data:
+  face_models:

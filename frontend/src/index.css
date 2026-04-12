@@ -1,0 +1,265 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased text-stone-800;
+  }
+}
+
+/* ── Leaflet overrides ──────────────────────────────── */
+
+.leaflet-container {
+  z-index: 0;
+}
+
+.photo-marker-icon {
+  border-radius: 50%;
+  border: 3px solid #DA251D;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  object-fit: cover;
+}
+
+.custom-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 0;
+  min-width: 240px;
+}
+
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+  background-color: rgba(218, 37, 29, 0.2) !important;
+}
+
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+  background-color: rgba(218, 37, 29, 0.7) !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+/* ── Album typography ───────────────────────────────── */
+
+.font-album {
+  font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+}
+
+/* ── Presentation mode ──────────────────────────────── */
+
+.pres-root {
+  cursor: none;
+}
+.pres-root:hover {
+  cursor: default;
+}
+
+/* Slide entrance */
+@keyframes slide-in-next {
+  from { opacity: 0; transform: scale(1.04); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-prev {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.pres-slide-next {
+  animation: slide-in-next 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.pres-slide-prev {
+  animation: slide-in-prev 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Text reveal */
+@keyframes text-reveal {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pres-text-reveal {
+  animation: text-reveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+}
+
+/* Ken Burns variants */
+@keyframes kb-zoom-in {
+  from { transform: scale(1); }
+  to   { transform: scale(1.12); }
+}
+@keyframes kb-zoom-out {
+  from { transform: scale(1.15); }
+  to   { transform: scale(1); }
+}
+@keyframes kb-pan-left {
+  from { transform: scale(1.15) translateX(3%); }
+  to   { transform: scale(1.15) translateX(-3%); }
+}
+@keyframes kb-pan-right {
+  from { transform: scale(1.15) translateX(-3%); }
+  to   { transform: scale(1.15) translateX(3%); }
+}
+@keyframes kb-pan-up {
+  from { transform: scale(1.12) translateY(3%); }
+  to   { transform: scale(1.12) translateY(-2%); }
+}
+
+.kb-zoom-in   { animation: kb-zoom-in   8s ease-out both; }
+.kb-zoom-out  { animation: kb-zoom-out  8s ease-out both; }
+.kb-pan-left  { animation: kb-pan-left  10s ease-in-out both; }
+.kb-pan-right { animation: kb-pan-right 10s ease-in-out both; }
+.kb-pan-up    { animation: kb-pan-up    10s ease-in-out both; }
+
+/* ── Album book web styling ─────────────────────────── */
+
+.album-book {
+  background: linear-gradient(135deg, #faf9f7 0%, #f5f3ef 100%);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 8px 30px rgba(0, 0, 0, 0.06),
+    0 25px 60px rgba(0, 0, 0, 0.04);
+}
+
+/* ── Print styles ───────────────────────────────────── */
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  /* Hide everything except the album */
+  header,
+  nav,
+  .album-controls {
+    display: none !important;
+  }
+
+  /* The #root > App > main structure */
+  #root > div {
+    height: auto !important;
+    display: block !important;
+  }
+  #root > div > main {
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+  #root > div > main > div {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .album-book {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: white !important;
+  }
+
+  .album-pages {
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+
+  /* ── Cover page ── */
+
+  .album-cover {
+    border-radius: 0 !important;
+    break-after: page;
+    height: 100vh;
+    width: 100vw;
+    page-break-after: always;
+  }
+
+  .album-cover img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+
+  .album-cover > div:last-child {
+    padding-bottom: 8vh !important;
+  }
+
+  /* ── Each spread on its own page ── */
+
+  .album-spread {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+    padding: 5vh 6vw !important;
+    height: 100vh;
+    width: 100vw;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* Override grid for print to ensure proper sizing */
+  .album-spread.grid {
+    display: grid;
+    align-content: center;
+    height: 100vh;
+    padding: 5vh 6vw !important;
+  }
+
+  .album-spread img {
+    border-radius: 4px !important;
+  }
+
+  /* Feature spread: image fills most of the page */
+  .album-spread > .rounded-xl {
+    max-height: 70vh;
+  }
+
+  /* Separator hidden in print */
+  .album-spread + div:has(> .flex.items-center.justify-center) {
+    display: none !important;
+  }
+
+  /* Colophon */
+  .album-pages > div:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  /* Ensure images print full quality */
+  img {
+    max-width: 100% !important;
+  }
+
+  /* Hide hover effects */
+  .group-hover\:scale-\[1\.02\] {
+    transform: none !important;
+  }
+
+  /* Clean rounded corners for print */
+  .rounded-xl,
+  .rounded-2xl,
+  .rounded-3xl {
+    border-radius: 4px !important;
+  }
+}

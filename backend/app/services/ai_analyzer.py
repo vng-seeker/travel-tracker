@@ -132,11 +132,26 @@ async def _anthropic_text(prompt: str, max_tokens: int = 800) -> str:
 
 # ── Ollama calls ─────────────────────────────────────────
 
-def _ollama_prompt_no_think(prompt: str) -> str:
-    return prompt + "\n\n/no_think"
+OLLAMA_VISION_MAX_TOKENS = 2000
+OLLAMA_TEXT_MAX_TOKENS = 3000
 
 
-async def _ollama_vision(image_data: str, prompt: str, max_tokens: int = 500) -> str:
+def _extract_ollama_text(data: dict) -> str:
+    """Extract text from Ollama OpenAI-compatible response.
+    Qwen3-VL may put thinking in a `reasoning` field and leave `content` empty.
+    """
+    msg = data["choices"][0]["message"]
+    content = (msg.get("content") or "").strip()
+    if content:
+        return content
+    reasoning = (msg.get("reasoning") or "").strip()
+    if reasoning:
+        logger.info("Ollama: content empty, falling back to reasoning field")
+        return reasoning
+    return ""
+
+
+async def _ollama_vision(image_data: str, prompt: str, max_tokens: int | None = None) -> str:
     client = _get_ollama_client()
     url = f"{settings.ollama_base_url}/v1/chat/completions"
     body = {
@@ -145,31 +160,29 @@ async def _ollama_vision(image_data: str, prompt: str, max_tokens: int = 500) ->
             "role": "user",
             "content": [
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
-                {"type": "text", "text": _ollama_prompt_no_think(prompt)},
+                {"type": "text", "text": prompt + "\n\n/no_think"},
             ],
         }],
-        "max_tokens": max_tokens,
+        "max_tokens": max_tokens or OLLAMA_VISION_MAX_TOKENS,
         "stream": False,
     }
     resp = await client.post(url, json=body, timeout=OLLAMA_VISION_TIMEOUT)
     resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"].strip()
+    return _extract_ollama_text(resp.json())
 
 
-async def _ollama_text(prompt: str, max_tokens: int = 800) -> str:
+async def _ollama_text(prompt: str, max_tokens: int | None = None) -> str:
     client = _get_ollama_client()
     url = f"{settings.ollama_base_url}/v1/chat/completions"
     body = {
         "model": settings.ollama_model,
-        "messages": [{"role": "user", "content": _ollama_prompt_no_think(prompt)}],
-        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt + "\n\n/no_think"}],
+        "max_tokens": max_tokens or OLLAMA_TEXT_MAX_TOKENS,
         "stream": False,
     }
     resp = await client.post(url, json=body, timeout=OLLAMA_TEXT_TIMEOUT)
     resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"].strip()
+    return _extract_ollama_text(resp.json())
 
 
 # ── Prompt builders ──────────────────────────────────────

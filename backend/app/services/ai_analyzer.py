@@ -21,8 +21,8 @@ MAX_IMAGE_DIMENSION = 1024
 MAX_RETRIES = 4
 RETRY_BASE_DELAY = 2.0
 
-OLLAMA_VISION_TIMEOUT = 120.0
-OLLAMA_TEXT_TIMEOUT = 60.0
+OLLAMA_VISION_TIMEOUT = 180.0
+OLLAMA_TEXT_TIMEOUT = 180.0
 
 
 # ── Clients ───────────────────────────────────────────────
@@ -37,7 +37,7 @@ def _get_anthropic_client() -> anthropic.AsyncAnthropic:
 def _get_ollama_client() -> httpx.AsyncClient:
     global _ollama_client
     if _ollama_client is None:
-        _ollama_client = httpx.AsyncClient(timeout=httpx.Timeout(OLLAMA_VISION_TIMEOUT))
+        _ollama_client = httpx.AsyncClient(timeout=httpx.Timeout(OLLAMA_TEXT_TIMEOUT))
     return _ollama_client
 
 
@@ -272,7 +272,7 @@ async def analyze_photo(
 
         return _extract_json(raw)
 
-    except asyncio.TimeoutError:
+    except (asyncio.TimeoutError, httpx.TimeoutException):
         logger.warning("Photo analysis timed out for %s", file_path)
         fallback["description"] = "Analyse expirée"
         return fallback
@@ -317,8 +317,9 @@ async def generate_day_summary(
 
         return _extract_json(raw)
 
-    except asyncio.TimeoutError:
-        return {"summary": "Génération du résumé expirée", "highlights": ""}
+    except (asyncio.TimeoutError, httpx.TimeoutException):
+        logger.warning("Day summary generation timed out")
+        return {"summary": "Génération du résumé expirée — réessayez", "highlights": ""}
     except json.JSONDecodeError:
         logger.warning("Failed to parse day summary: %s", raw[:200] if "raw" in dir() else "?")
         return {"summary": raw if "raw" in dir() else "Erreur", "highlights": ""}
@@ -326,7 +327,7 @@ async def generate_day_summary(
         logger.error("API error for summary: %s", e)
         return {"summary": "Erreur API", "highlights": ""}
     except Exception as e:
-        logger.error("Unexpected summary error: %s", e)
+        logger.error("Unexpected summary error [%s]: %s", type(e).__name__, repr(e))
         return {"summary": "Erreur", "highlights": ""}
 
 
@@ -374,7 +375,7 @@ async def generate_album_selection(
         result["selected_ids"] = [i for i in result.get("selected_ids", []) if i in valid_ids]
         return result
 
-    except asyncio.TimeoutError:
+    except (asyncio.TimeoutError, httpx.TimeoutException):
         logger.warning("Album generation timed out")
         fallback["album_description"] = "Génération expirée — sélection par défaut."
         return fallback

@@ -130,59 +130,44 @@ async def _anthropic_text(prompt: str, max_tokens: int = 800) -> str:
     return response.content[0].text.strip()
 
 
-# ── Ollama calls ─────────────────────────────────────────
-
-OLLAMA_VISION_MAX_TOKENS = 2000
-OLLAMA_TEXT_MAX_TOKENS = 3000
+# ── Ollama calls (native /api/chat with think:false) ─────
 
 
-def _extract_ollama_text(data: dict) -> str:
-    """Extract text from Ollama OpenAI-compatible response.
-    Qwen3-VL may put thinking in a `reasoning` field and leave `content` empty.
-    """
-    msg = data["choices"][0]["message"]
-    content = (msg.get("content") or "").strip()
-    if content:
-        return content
-    reasoning = (msg.get("reasoning") or "").strip()
-    if reasoning:
-        logger.info("Ollama: content empty, falling back to reasoning field")
-        return reasoning
-    return ""
+def _extract_ollama_response(data: dict) -> str:
+    """Extract text from Ollama native API response."""
+    return (data.get("message", {}).get("content") or "").strip()
 
 
-async def _ollama_vision(image_data: str, prompt: str, max_tokens: int | None = None) -> str:
+async def _ollama_vision(image_data: str, prompt: str) -> str:
     client = _get_ollama_client()
-    url = f"{settings.ollama_base_url}/v1/chat/completions"
+    url = f"{settings.ollama_base_url}/api/chat"
     body = {
         "model": settings.ollama_model,
         "messages": [{
             "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
-                {"type": "text", "text": prompt + "\n\n/no_think"},
-            ],
+            "content": prompt,
+            "images": [image_data],
         }],
-        "max_tokens": max_tokens or OLLAMA_VISION_MAX_TOKENS,
+        "think": False,
         "stream": False,
     }
     resp = await client.post(url, json=body, timeout=OLLAMA_VISION_TIMEOUT)
     resp.raise_for_status()
-    return _extract_ollama_text(resp.json())
+    return _extract_ollama_response(resp.json())
 
 
-async def _ollama_text(prompt: str, max_tokens: int | None = None) -> str:
+async def _ollama_text(prompt: str) -> str:
     client = _get_ollama_client()
-    url = f"{settings.ollama_base_url}/v1/chat/completions"
+    url = f"{settings.ollama_base_url}/api/chat"
     body = {
         "model": settings.ollama_model,
-        "messages": [{"role": "user", "content": prompt + "\n\n/no_think"}],
-        "max_tokens": max_tokens or OLLAMA_TEXT_MAX_TOKENS,
+        "messages": [{"role": "user", "content": prompt}],
+        "think": False,
         "stream": False,
     }
     resp = await client.post(url, json=body, timeout=OLLAMA_TEXT_TIMEOUT)
     resp.raise_for_status()
-    return _extract_ollama_text(resp.json())
+    return _extract_ollama_response(resp.json())
 
 
 # ── Prompt builders ──────────────────────────────────────
@@ -366,7 +351,7 @@ async def generate_album_selection(
 
     try:
         if _is_ollama():
-            raw = await _ollama_text(prompt, max_tokens=1000)
+            raw = await _ollama_text(prompt)
         else:
             raw = await _anthropic_text(prompt, max_tokens=1000)
 

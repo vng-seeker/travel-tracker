@@ -5,12 +5,22 @@ from pydantic import BaseModel, constr
 class TripCreate(BaseModel):
     name: constr(min_length=1, max_length=255)
     country: constr(min_length=1, max_length=255)
+    start_date: date | None = None
+    end_date: date | None = None
+    travel_style: str | None = None
+    ai_context: str | None = None
+    language: str = "fr"
 
 
 class TripUpdate(BaseModel):
     name: str | None = None
     country: str | None = None
     description: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    travel_style: str | None = None
+    ai_context: str | None = None
+    language: str | None = None
     center_lat: float | None = None
     center_lng: float | None = None
     center_zoom: int | None = None
@@ -22,6 +32,11 @@ class TripOut(BaseModel):
     name: str
     country: str
     description: str | None
+    start_date: date | None
+    end_date: date | None
+    travel_style: str | None
+    ai_context: str | None
+    language: str
     center_lat: float
     center_lng: float
     center_zoom: int
@@ -96,12 +111,16 @@ class TripStatsOut(BaseModel):
 
 class PersonCreate(BaseModel):
     name: constr(min_length=1, max_length=255)
+    role: str | None = None
+    description: str | None = None
 
 
 class PersonOut(BaseModel):
     id: int
     trip_id: int
     name: str
+    role: str | None = None
+    description: str | None = None
     face_count: int = 0
     photo_count: int = 0
     sample_crops: list[str] = []

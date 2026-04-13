@@ -173,9 +173,21 @@ export default function People({ tripId }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <p className="font-medium text-stone-800 truncate">
-                    {person.name}
-                  </p>
+                  <div>
+                    <p className="font-medium text-stone-800 truncate">
+                      {person.name}
+                      {person.role && (
+                        <span className="ml-1.5 text-xs font-normal text-stone-400">
+                          ({person.role})
+                        </span>
+                      )}
+                    </p>
+                    {person.description && (
+                      <p className="text-xs text-stone-400 truncate mt-0.5">
+                        {person.description}
+                      </p>
+                    )}
+                  </div>
                 )}
                 <p className="text-xs text-stone-400">
                   {person.face_count} visage{person.face_count > 1 ? "s" : ""} ·{" "}

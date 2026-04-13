@@ -3,6 +3,11 @@ export interface Trip {
   name: string;
   country: string;
   description: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  travel_style: string | null;
+  ai_context: string | null;
+  language: string;
   center_lat: number;
   center_lng: number;
   center_zoom: number;
@@ -60,6 +65,8 @@ export interface Person {
   id: number;
   trip_id: number;
   name: string;
+  role: string | null;
+  description: string | null;
   face_count: number;
   photo_count: number;
   sample_crops: string[];

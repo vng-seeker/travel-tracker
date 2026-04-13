@@ -14,6 +14,7 @@ import {
   Pencil,
   Check,
   RotateCcw,
+  RefreshCw,
 } from "lucide-react";
 import api from "../../api/client";
 import type { Photo, DayInfo } from "../../types";
@@ -158,19 +159,38 @@ function DayCard({
         <div className="px-5 pb-5 space-y-4">
           {/* Editable summary */}
           {day.summary && !editingSummary && (
-            <div
-              className="group relative bg-amber-50 border border-amber-100 rounded-xl p-4 cursor-pointer hover:bg-amber-100/60 transition-colors"
-              onClick={() => {
-                setSummaryDraft(day.summary || "");
-                setEditingSummary(true);
-              }}
-            >
-              <p className="text-sm text-stone-700 leading-relaxed italic">
-                {day.summary}
-              </p>
-              <span className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 bg-white/80 rounded-md border border-amber-200">
-                <Pencil size={12} className="text-amber-600" />
-              </span>
+            <div className="group relative bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <div
+                className="cursor-pointer hover:bg-amber-100/60 transition-colors rounded-lg -m-1 p-1"
+                onClick={() => {
+                  setSummaryDraft(day.summary || "");
+                  setEditingSummary(true);
+                }}
+              >
+                <p className="text-sm text-stone-700 leading-relaxed italic">
+                  {day.summary}
+                </p>
+              </div>
+              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGenerateSummary(day.day);
+                  }}
+                  disabled={isGenerating}
+                  className="p-1.5 bg-white/80 rounded-md border border-amber-200 hover:bg-amber-100 transition-colors"
+                  title="Re-générer le résumé"
+                >
+                  {isGenerating ? (
+                    <Loader2 size={12} className="text-amber-600 animate-spin" />
+                  ) : (
+                    <RefreshCw size={12} className="text-amber-600" />
+                  )}
+                </button>
+                <span className="p-1.5 bg-white/80 rounded-md border border-amber-200">
+                  <Pencil size={12} className="text-amber-600" />
+                </span>
+              </div>
             </div>
           )}
 
@@ -216,6 +236,13 @@ function DayCard({
               )}
               Générer le résumé de la journée
             </button>
+          )}
+
+          {isGenerating && day.has_summary && (
+            <div className="flex items-center gap-2 text-xs text-amber-600">
+              <Loader2 size={14} className="animate-spin" />
+              Re-génération du résumé en cours...
+            </div>
           )}
 
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">

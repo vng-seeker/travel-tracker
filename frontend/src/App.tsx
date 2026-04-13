@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import api from "./api/client";
 import TripDashboard from "./components/TripDashboard/TripDashboard";
+import TripSetup from "./components/TripSetup/TripSetup";
 import TripMap from "./components/Map/TripMap";
 import PhotoUpload from "./components/PhotoUpload/PhotoUpload";
 import Timeline from "./components/Timeline/Timeline";
@@ -57,6 +58,7 @@ export default function App() {
   const [days, setDays] = useState<DayInfo[]>([]);
   const [stats, setStats] = useState<TripStats | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+  const [showTripConfig, setShowTripConfig] = useState(false);
 
   // Upload queue state (lives at App level to persist across tab switches)
   const [uploadFiles, setUploadFiles] = useState<UploadingFile[]>([]);
@@ -317,6 +319,21 @@ export default function App() {
     );
   }
 
+  // Trip config overlay
+  if (showTripConfig) {
+    return (
+      <TripSetup
+        trip={selectedTrip}
+        onComplete={(updatedTrip) => {
+          setSelectedTrip(updatedTrip);
+          setShowTripConfig(false);
+          fetchTrips();
+        }}
+        onBack={() => setShowTripConfig(false)}
+      />
+    );
+  }
+
   // Trip view
   const geoCount = photos.filter(
     (p) => p.latitude != null && p.longitude != null
@@ -346,8 +363,18 @@ export default function App() {
               <p className="text-[11px] text-stone-400 leading-tight flex items-center gap-1">
                 <MapPin size={9} />
                 {selectedTrip.country}
+                {selectedTrip.travel_style && (
+                  <span className="ml-1 text-stone-300">· {selectedTrip.travel_style}</span>
+                )}
               </p>
             </div>
+            <button
+              onClick={() => setShowTripConfig(true)}
+              className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-300 hover:text-stone-600 transition-colors"
+              title="Configurer le voyage"
+            >
+              <Settings size={16} />
+            </button>
           </div>
 
           {stats && stats.total_photos > 0 && (

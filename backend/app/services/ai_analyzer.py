@@ -1,4 +1,5 @@
 import base64
+import dataclasses
 import io
 import json
 import asyncio
@@ -21,8 +22,8 @@ MAX_IMAGE_DIMENSION = 1024
 MAX_RETRIES = 4
 RETRY_BASE_DELAY = 2.0
 
-OLLAMA_VISION_TIMEOUT = 180.0
-OLLAMA_TEXT_TIMEOUT = 180.0
+OLLAMA_VISION_TIMEOUT = 300.0
+OLLAMA_TEXT_TIMEOUT = 300.0
 
 
 # ── Clients ───────────────────────────────────────────────
@@ -172,16 +173,50 @@ async def _ollama_text(prompt: str) -> str:
 
 # ── Prompt builders ──────────────────────────────────────
 
-def _build_photo_prompt(country: str, person_names: list[str] | None = None) -> str:
-    people_hint = ""
-    if person_names:
-        names_str = ", ".join(person_names)
-        people_hint = f"\nPersonnes connues dans ce voyage : {names_str}. Si tu reconnais l'une d'elles, mentionne-la dans la description."
+@dataclasses.dataclass
+class TripContext:
+    country: str = "ce pays"
+    travel_style: str | None = None
+    ai_context: str | None = None
+    language: str = "fr"
+    people: list[dict] | None = None
 
-    return f"""Tu es un assistant de voyage expert. Analyse cette photo prise pendant un voyage en/au {country}.{people_hint}
+
+def _build_trip_hint(ctx: TripContext) -> str:
+    parts = []
+    if ctx.travel_style:
+        parts.append(f"Type de voyage : {ctx.travel_style}.")
+    if ctx.ai_context:
+        parts.append(f"Contexte : {ctx.ai_context}")
+    if ctx.people:
+        descs = []
+        for p in ctx.people:
+            s = p["name"]
+            if p.get("role"):
+                s += f" ({p['role']})"
+            if p.get("description"):
+                s += f" — {p['description']}"
+            descs.append(s)
+        parts.append("Voyageurs : " + " ; ".join(descs) + ".")
+    return "\n" + "\n".join(parts) if parts else ""
+
+
+def _lang_instruction(ctx: TripContext) -> str:
+    if ctx.language == "fr":
+        return "en français"
+    if ctx.language == "en":
+        return "in English"
+    return f"in {ctx.language}"
+
+
+def _build_photo_prompt(ctx: TripContext) -> str:
+    lang = _lang_instruction(ctx)
+    trip_hint = _build_trip_hint(ctx)
+
+    return f"""Tu es un assistant de voyage expert. Analyse cette photo prise pendant un voyage en/au {ctx.country}.{trip_hint}
 
 Réponds UNIQUEMENT avec un objet JSON valide (pas de texte autour), avec ces champs :
-- "description": une description vivante et évocatrice de la photo en 2-3 phrases en français, comme un récit de voyage
+- "description": une description vivante et évocatrice de la photo en 2-3 phrases {lang}, comme un récit de voyage. Si tu reconnais des voyageurs, mentionne-les par leur prénom.
 - "category": une catégorie parmi: paysage, nourriture, temple, rue, plage, marche, transport, nature, ville, portrait, monument, activite, hotel, autre
 - "location_guess": si tu reconnais le lieu précis, sinon null
 
@@ -189,29 +224,25 @@ Exemple de réponse :
 {{"description": "Le soleil se couche sur la baie, peignant les montagnes d'or et de pourpre. Les bateaux traditionnels glissent silencieusement sur les eaux émeraude.", "category": "paysage", "location_guess": "Baie d'Ha Long"}}"""
 
 
-def _build_summary_prompt(day_date: str, descriptions: str, country: str, person_names: list[str] | None = None) -> str:
-    people_hint = ""
-    if person_names:
-        names_str = ", ".join(person_names)
-        people_hint = f"\nPersonnes présentes dans ce voyage : {names_str}. Si elles apparaissent dans les descriptions, mentionne-les par leur prénom dans le récit pour le rendre plus personnel."
+def _build_summary_prompt(day_date: str, descriptions: str, ctx: TripContext) -> str:
+    lang = _lang_instruction(ctx)
+    trip_hint = _build_trip_hint(ctx)
 
-    return f"""Tu es un écrivain de voyage talentueux. À partir des descriptions de photos prises le {day_date} pendant un voyage en/au {country}, rédige un résumé de la journée.{people_hint}
+    return f"""Tu es un écrivain de voyage talentueux. À partir des descriptions de photos prises le {day_date} pendant un voyage en/au {ctx.country}, rédige un résumé de la journée.{trip_hint}
 
 Photos de la journée :
 {descriptions}
 
 Réponds UNIQUEMENT avec un objet JSON valide :
-- "summary": un récit de voyage captivant de 3-5 phrases en français, racontant la journée comme dans un carnet de voyage
+- "summary": un récit de voyage captivant de 3-5 phrases {lang}, racontant la journée comme dans un carnet de voyage. Mentionne les voyageurs par leur prénom quand c'est pertinent.
 - "highlights": les 2-3 moments forts de la journée, séparés par des virgules"""
 
 
-def _build_album_prompt(count: int, country: str, photos_info: str, person_names: list[str] | None = None) -> str:
-    people_hint = ""
-    if person_names:
-        names_str = ", ".join(person_names)
-        people_hint = f"\nLes voyageurs sont : {names_str}. Mentionne-les dans la description de l'album et intègre des photos où ils apparaissent."
+def _build_album_prompt(count: int, ctx: TripContext, photos_info: str) -> str:
+    lang = _lang_instruction(ctx)
+    trip_hint = _build_trip_hint(ctx)
 
-    return f"""Tu es un directeur artistique spécialisé dans les albums de voyage. Tu dois sélectionner les {count} photos les plus emblématiques d'un voyage en/au {country} pour créer un album photo mémorable.{people_hint}
+    return f"""Tu es un directeur artistique spécialisé dans les albums de voyage. Tu dois sélectionner les {count} photos les plus emblématiques d'un voyage en/au {ctx.country} pour créer un album photo mémorable.{trip_hint}
 
 Critères de sélection (par ordre de priorité) :
 1. Diversité : varier les catégories (paysage, nourriture, portrait, monument...), les lieux et les jours
@@ -225,8 +256,8 @@ Voici les photos disponibles :
 
 Réponds UNIQUEMENT avec un objet JSON valide :
 - "selected_ids": liste de {count} IDs de photos sélectionnées, dans l'ordre chronologique
-- "album_title": un titre poétique pour l'album en français (ex: "Vietnam, entre terre et mer")
-- "album_description": 2-3 phrases résumant l'esprit du voyage, en français"""
+- "album_title": un titre poétique pour l'album {lang} (ex: "Vietnam, entre terre et mer")
+- "album_description": 2-3 phrases résumant l'esprit du voyage, {lang}"""
 
 
 # ── Public API (dispatch by provider) ────────────────────
@@ -237,9 +268,10 @@ def _is_ollama() -> bool:
 
 async def analyze_photo(
     file_path: str | Path,
-    country: str = "ce pays",
-    person_names: list[str] | None = None,
+    ctx: TripContext | None = None,
 ) -> dict:
+    if ctx is None:
+        ctx = TripContext()
     fallback = {"description": "", "category": "autre", "location_guess": None}
 
     if not _is_ollama() and not settings.anthropic_api_key:
@@ -247,7 +279,7 @@ async def analyze_photo(
         return fallback
 
     image_data, media_type = _image_to_base64(file_path)
-    prompt = _build_photo_prompt(country, person_names)
+    prompt = _build_photo_prompt(ctx)
 
     try:
         if _is_ollama():
@@ -282,9 +314,10 @@ async def analyze_photo(
 async def generate_day_summary(
     day_date: str,
     descriptions: list[str],
-    country: str = "ce pays",
-    person_names: list[str] | None = None,
+    ctx: TripContext | None = None,
 ) -> dict:
+    if ctx is None:
+        ctx = TripContext()
     fallback = {"summary": "", "highlights": ""}
 
     if not _is_ollama() and not settings.anthropic_api_key:
@@ -292,7 +325,7 @@ async def generate_day_summary(
         return fallback
 
     numbered = "\n".join(f"{i+1}. {d}" for i, d in enumerate(descriptions))
-    prompt = _build_summary_prompt(day_date, numbered, country, person_names)
+    prompt = _build_summary_prompt(day_date, numbered, ctx)
 
     try:
         if _is_ollama():
@@ -318,14 +351,15 @@ async def generate_day_summary(
 
 async def generate_album_selection(
     count: int,
-    country: str,
     photos_info: list[dict],
-    person_names: list[str] | None = None,
+    ctx: TripContext | None = None,
 ) -> dict:
+    if ctx is None:
+        ctx = TripContext()
     fallback_ids = [p["id"] for p in photos_info[:count]]
     fallback = {
         "selected_ids": fallback_ids,
-        "album_title": f"Album — {country}",
+        "album_title": f"Album — {ctx.country}",
         "album_description": "",
     }
 
@@ -347,7 +381,7 @@ async def generate_album_selection(
         lines.append(" | ".join(parts))
 
     photos_text = "\n".join(lines)
-    prompt = _build_album_prompt(count, country, photos_text, person_names)
+    prompt = _build_album_prompt(count, ctx, photos_text)
 
     try:
         if _is_ollama():

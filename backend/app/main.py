@@ -24,7 +24,7 @@ from .schemas import (
 )
 from .services.photos import validate_extension, save_photo, generate_thumbnail
 from .services.exif import extract_metadata_from_bytes
-from .services.ai_analyzer import analyze_photo, generate_day_summary, generate_album_selection
+from .services.ai_analyzer import analyze_photo, generate_day_summary, generate_album_selection, TripContext
 from .services.geocoding import reverse_geocode, forward_geocode, geocode_country
 from .services.face_detection import detect_faces, find_matching_person, cluster_faces
 
@@ -66,6 +66,31 @@ def _run_migration():  # noqa: C901
         if "trip_id" not in columns2:
             conn.execute(text("ALTER TABLE day_summaries ADD COLUMN trip_id INTEGER REFERENCES trips(id)"))
             logger.info("Added trip_id column to day_summaries")
+        # Trip new columns
+        result_trips = conn.execute(text("PRAGMA table_info(trips)"))
+        trip_cols = [row[1] for row in result_trips]
+        for col, sql in [
+            ("start_date", "ALTER TABLE trips ADD COLUMN start_date DATE"),
+            ("end_date", "ALTER TABLE trips ADD COLUMN end_date DATE"),
+            ("travel_style", "ALTER TABLE trips ADD COLUMN travel_style VARCHAR(100)"),
+            ("ai_context", "ALTER TABLE trips ADD COLUMN ai_context TEXT"),
+            ("language", "ALTER TABLE trips ADD COLUMN language VARCHAR(10) DEFAULT 'fr'"),
+        ]:
+            if col not in trip_cols:
+                conn.execute(text(sql))
+                logger.info("Added %s column to trips", col)
+
+        # Person new columns
+        result_people = conn.execute(text("PRAGMA table_info(people)"))
+        people_cols = [row[1] for row in result_people]
+        for col, sql in [
+            ("role", "ALTER TABLE people ADD COLUMN role VARCHAR(255)"),
+            ("description", "ALTER TABLE people ADD COLUMN description TEXT"),
+        ]:
+            if col not in people_cols:
+                conn.execute(text(sql))
+                logger.info("Added %s column to people", col)
+
         conn.commit()
 
     with SessionLocal() as db:
@@ -92,12 +117,11 @@ async def _process_single_photo(photo_id: int):
         db.commit()
 
         trip = db.query(Trip).filter(Trip.id == photo.trip_id).first()
-        country = trip.country if trip else "ce pays"
         photo_path = Path(settings.photo_storage_path) / photo.filename
+        ctx = _build_trip_context(trip, db) if trip else TripContext()
 
         try:
-            person_names = [p.name for p in db.query(Person).filter(Person.trip_id == photo.trip_id).all()]
-            ai_result = await analyze_photo(photo_path, country=country, person_names=person_names or None)
+            ai_result = await analyze_photo(photo_path, ctx=ctx)
 
             if ai_result.get("location_guess"):
                 if not photo.location_name:
@@ -234,6 +258,21 @@ async def check_ollama_status():
 
 # ── Trips CRUD ──────────────────────────────────────────
 
+def _build_trip_context(trip: Trip, db: Session) -> TripContext:
+    people = db.query(Person).filter(Person.trip_id == trip.id).all()
+    people_dicts = [
+        {"name": p.name, "role": p.role, "description": p.description}
+        for p in people
+    ] if people else None
+    return TripContext(
+        country=trip.country,
+        travel_style=trip.travel_style,
+        ai_context=trip.ai_context,
+        language=trip.language or "fr",
+        people=people_dicts,
+    )
+
+
 def _enrich_trip(trip: Trip, db: Session) -> dict:
     photo_count = db.query(func.count(Photo.id)).filter(Photo.trip_id == trip.id).scalar() or 0
     min_d = db.query(func.min(Photo.taken_at)).filter(Photo.trip_id == trip.id).scalar()
@@ -251,6 +290,11 @@ async def create_trip(payload: TripCreate, db: Session = Depends(get_db)):
     trip = Trip(
         name=payload.name,
         country=payload.country,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        travel_style=payload.travel_style,
+        ai_context=payload.ai_context,
+        language=payload.language,
         center_lat=lat,
         center_lng=lng,
         center_zoom=zoom,
@@ -558,8 +602,8 @@ async def generate_summary(trip_id: int, request: GenerateSummaryRequest, db: Se
     if not descriptions:
         raise HTTPException(status_code=400, detail="Aucune description disponible")
 
-    person_names = [p.name for p in db.query(Person).filter(Person.trip_id == trip_id).all()]
-    result = await generate_day_summary(str(request.day), descriptions, country=trip.country, person_names=person_names or None)
+    ctx = _build_trip_context(trip, db)
+    result = await generate_day_summary(str(request.day), descriptions, ctx=ctx)
 
     existing = db.query(DaySummary).filter(DaySummary.trip_id == trip_id, DaySummary.day == request.day).first()
     if existing:
@@ -648,8 +692,8 @@ async def generate_album(trip_id: int, request: AlbumGenerateRequest, db: Sessio
         for p in photos
     ]
 
-    person_names = [p.name for p in db.query(Person).filter(Person.trip_id == trip_id).all()]
-    result = await generate_album_selection(count, trip.country, photos_info, person_names=person_names or None)
+    ctx = _build_trip_context(trip, db)
+    result = await generate_album_selection(count, photos_info, ctx=ctx)
     selected_ids = result.get("selected_ids", [])
 
     if not selected_ids:
@@ -772,7 +816,7 @@ async def create_person(trip_id: int, payload: PersonCreate, db: Session = Depen
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=404, detail="Voyage non trouvé")
-    person = Person(trip_id=trip_id, name=payload.name)
+    person = Person(trip_id=trip_id, name=payload.name, role=payload.role, description=payload.description)
     db.add(person)
     db.commit()
     db.refresh(person)
@@ -789,6 +833,10 @@ async def update_person(person_id: int, payload: PersonCreate, db: Session = Dep
     if not person:
         raise HTTPException(status_code=404, detail="Personne non trouvée")
     person.name = payload.name
+    if payload.role is not None:
+        person.role = payload.role
+    if payload.description is not None:
+        person.description = payload.description
     db.commit()
     db.refresh(person)
     faces = db.query(Face).filter(Face.person_id == person.id).all()

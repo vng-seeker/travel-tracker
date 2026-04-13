@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ai_provider: str = "anthropic"
     ollama_base_url: str = "http://host.docker.internal:11434"
-    ollama_model: str = "qwen3-vl"
+    ollama_model: str = "qwen3.5:9b"
     database_url: str = "sqlite:///./data/travel_tracker.db"
     photo_storage_path: str = "./data/photos"
     thumbnail_storage_path: str = "./data/thumbnails"
